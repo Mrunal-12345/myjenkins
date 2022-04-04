@@ -1,1 +1,20 @@
-hello i am munna
+pipeline {
+    agent any 
+    stages {
+        stage('Build') { 
+            steps {
+                echo " yes build "
+            }
+        }
+        stage('Test') { 
+            steps {
+                 echo " yes totest "
+            }
+        }
+        stage('Deploy') { 
+            steps {
+                echo " yes dublu "
+            }
+        }
+    }
+}
