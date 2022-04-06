@@ -1,9 +1,9 @@
 pipeline {
     agent any 
     stages {
-        stage('Build') { 
+        stage('pull') { 
             steps {
-                echo " yes munna built "
+                git "https://github.com/Mrunal-12345/myjenkins.git"
             }
         }
         stage('Test') { 
