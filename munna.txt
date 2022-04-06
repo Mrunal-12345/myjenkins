@@ -3,17 +3,17 @@ pipeline {
     stages {
         stage('Build') { 
             steps {
-                echo " yes built "
+                echo " yes munna built "
             }
         }
         stage('Test') { 
             steps {
-                 echo " yes totest "
+                 echo " yes samrat totest "
             }
         }
         stage('Deploy') { 
             steps {
-                echo " yes dublu "
+                echo " yes kaila dublu "
             }
         }
     }
