@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('pull') { 
             steps {
-                echo "https://github.com/Mrunal-12345/myjenkins.git"
+                echo " demo https://github.com/Mrunal-12345/myjenkins.git"
             }
         }
         stage('Test') { 
