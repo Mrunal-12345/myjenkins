@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('pull') { 
             steps {
-                 git credentialsId: '07deea9e-9d03-490b-8745-1cc1192efdc6', url: 'https://github.com/Mrunal-12345/myjenkins.git'
+                 git credentialsId: '07deea9e-9d03-490b-8745-1cc1192efdc6', url: 'https://github.com/Mrunal-12345/spring-boot-war-example.git'
             }
         }
         stage('Build') { 
