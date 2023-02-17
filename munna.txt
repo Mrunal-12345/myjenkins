@@ -1,29 +1,192 @@
 pipeline {
-    agent any 
+
+    environment {
+        def ARTID = 'studentapp'
+        def ARTTYPE = 'war'
+        def ARTGRPID = 'com.jdevs'
+        def ARTURL = '54.232.78.42:8081'
+        def ARTREPO = 'mrunalraw'
+        def ARTVER = '2.2'
+        def ARTDOWPATH = '$ARTPROTO://$ARTURL/repository/$ARTREPO'
+        def ARTPROTO = 'http'
+        
+        DOCKER_TAG = getVersion()
+    }
+     
+    agent any
+    
+    tools{
+  maven 'mavenone'
+    }
+
     stages {
-        stage('pull') { 
+
+        stage('Checkout') { 
             steps {
-                 git credentialsId: '07deea9e-9d03-490b-8745-1cc1192efdc6', url: 'https://github.com/Mrunal-12345/studentapp-ui.git'
+                 git 'https://github.com/Mrunal-12345/studentapp-ui.git'
+                 echo 'The code is pulled Sucessfully'
             }
         }
-        stage('Build') { 
+    
+        stage('Build Code') { 
             steps {
                  sh 'mvn clean package'
+                 echo 'The Source Code is Build Sucessfully'
             }
         }
-        stage('Test') { 
+
+        stage('Unit Test') { 
             steps {
-                withSonarQubeEnv('sonar') {
-                 sh '''mvn sonar:sonar'''
-               }
-              }
+                 sh 'mvn --batch-mode -Dmaven.test.failure.ignore=true test'
+                 echo 'The Unit test is Sucessfull'
             }
-             stage('Deploy') { 
-            steps {
-                
-            deploy adapters: [tomcat8(credentialsId: 'tom4', path: '', url: 'http://18.228.117.172:8080/')], contextPath: '/', war: '**/*.war'
         }
-      }
         
+        stage('Code Coverage') { 
+            steps {
+                   jacoco exclusionPattern: '**/*Test*.class', inclusionPattern: '**/*.class', sourceExclusionPattern: 'generated/**/*.java'
+                echo 'The Code coverage is done'
+            }
+        }
+       
+        stage('Sonarqube Test') { 
+            steps {
+            withSonarQubeEnv('sonar') {
+                 sh '''mvn sonar:sonar'''         }
+                 echo 'The Application passes All the Quality Gates'
+                
+            }    
+        } 
+        
+        stage('Artifactory Upload to Nexus') {
+            steps {
+                script{
+                def pom = readMavenPom file: 'pom.xml'
+                    
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3',
+                    protocol: "${env.ARTPROTO}",
+                    nexusUrl:"${env.ARTURL}",
+                    groupId:  "${pom.groupId}",
+                    version: "${pom.version}" ,
+                    repository: "${env.ARTREPO}",
+                    credentialsId: "nexus",
+                    artifacts: [
+                        [artifactId: 'mrunalapp',
+                         classifier: '',
+                         file: "target/mrunalapp-${pom.version}.${pom.packaging}",
+                         type: "${pom.packaging}"]
+                    ]
+                    )
+               }
+            }
+        } 
+        
+        
+        stage('Ansible playbook Pull') { 
+            agent {
+                label 'ans'
+            }
+            steps {
+                 git branch: 'main', url: 'https://github.com/Mrunal-12345/ansiblerepo.git'
+                 echo 'The Ansible Code is Pulled Sucessfully'
+            }
+        }
+        
+        stage('Artifactory Pull on ansible') { 
+            agent {
+                label 'ans'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'nexus', passwordVariable: 'artpass', usernameVariable: 'artuser')]) {
+                sh 'wget --user=$artuser --password=$artpass "http://$ARTURL/repository/$ARTREPO/com/jdevs/studentapp/2.2/studentapp-$ARTVER.$ARTTYPE"'
+            }
+                 echo 'The Artifact is Pulled Sucessfully'
+            }
+        }
+        
+        stage('Ansible Tomcat Deployment') { 
+            agent {
+                label 'ans'
+            }
+            steps {
+               ansiblePlaybook credentialsId: 'tom-ans', disableHostKeyChecking: true, installation: 'ansible', inventory: 'hosts', playbook: 'pb2.yaml' 
+               echo 'Tomcat Deployment is done'
+                
+            }
+        }
+        
+        
+        stage('Dockerfile Pull') { 
+            agent {
+                label 'doc'
+            }
+            steps {
+                 git branch: 'main', url: 'https://github.com/Mrunal-12345/dockerrepo.git'
+                 echo 'The Docker Code is Pulled Sucessfully'
+            }
+        }
+        
+        stage('Artifactory Pull on docker') { 
+            agent {
+                label 'doc'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'nexus', passwordVariable: 'artpass', usernameVariable: 'artuser')]) {
+                sh 'wget --user=$artuser --password=$artpass "http://$ARTURL/repository/$ARTREPO/com/jdevs/studentapp/2.2/studentapp-$ARTVER.$ARTTYPE"'
+             }
+                echo 'The Artifact is Pulled Sucessfully'
+            }
+        }
+
+        stage('Image build and tag') { 
+            agent {
+                label 'doc'
+            }
+            steps {
+                sh 'docker build -t samplewebapp:${DOCKER_TAG} .'
+                sh 'docker tag samplewebapp mrunalthak/samplewebapp:${DOCKER_TAG}'
+                echo 'Image build and tag sucessfully'
+            }
+        }
+        
+        stage('Publish image to Docker Hub') {
+           agent {
+                label 'doc'
+            }
+            steps {
+               withDockerRegistry([ credentialsId: "dochubcred", url: "" ]) {
+                sh  'docker push mrunalthak/samplewebapp:${DOCKER_TAG}'
+                                                           }
+                echo 'Image pushing on dockerhub is sucessfull'                                           
+           }
+        }
+
+        stage('Kubernetes Manifest file') {
+            agent {
+                label 'kube'
+            }
+            steps{
+               git branch: 'main', url: 'https://github.com/Mrunal-12345/Kuberepo.git'
+               echo 'The Docker Code is Pulled Sucessfully'
+            }
+        }
+
+        stage('Kubernetes Deployment') {
+            agent {
+                label 'kube'
+            }
+            steps{
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'kubeconf')]) {
+                sh 'kubectl apply -f "mymanifest.yaml"'
+                }
+            }
+        
+        }
     }
+}
+
+def getVersion(){
+    def CommitHash = sh returnStdout: true, script: 'git rev-parse --short HEAD'
+    return CommitHash
 }
